@@ -65,7 +65,7 @@ def minus_logf_grad(x):
 
 def HMC(U, grad_U, epsilon, L, current_q):
     q = current_q
-    p = np.random.normal(size=len(q))  # independent standard normal variates
+    p = np.random.normal(loc=0, scale=1, size=len(q))  # independent standard normal variates
     current_p = p
 
     traj = []
@@ -102,40 +102,60 @@ def HMC(U, grad_U, epsilon, L, current_q):
 
 
 def hmc_f(f, grad, n):
+    img = None
+    factor = 10
+    print("building image...")
     if n == 2:
-        img = np.zeros((300, 500))
-        for i in range(500):
-            for j in range(300):
-                img[299 - j, i] = np.exp(-f((i/10 - 25 ,j/10 - 20.0)))
+        hi_res = False
+        if hi_res:
+            img = np.zeros((300, 500))
+            for i in range(500):
+                print(i)
+                if i % 50 == 0:
+                    print(f"{i // 50} % done")
+                for j in range(300):
+                    #img[299 - j, i] = np.exp(-f((i/10 - 25 ,j/10 - 20.0)))
+                    img[299 - j, i] = -f((i/10 - 25 ,j/10 - 20.0))
+        else:
+            img = np.zeros((300, 500))
+            for i in range(50):
+                print(i)
+                for j in range(30):
+                    #img[299 - j, i] = -f((i/10 - 25 ,j/10 - 20.0))
+                    #factor = 2
+                    img[299-((10*j)+9):299-(10*j) + 1, (10 * i):(10 * i + 10)] = -f(((i * factor) + 0.5 - (25 * factor), ((j * factor) + 0.5) - (20.0 * factor)))
+    print(np.sum(np.sum(1-img)))
     ## HMC
-    L = 27
-    epsilon = 0.1#0.6
-    current_q = np.array((0, 0))
+    L = 1000
+    epsilon = 0.14#0.6
+    current_q = np.array((0, 10))
     m = 100
     samples = np.zeros((m, 2))
     #pdf(paste("trajectories-ex02.pdf", sep=""), width=9, height=3)
     for i in range(m):
-        #print(i)
         res = HMC(f, grad, epsilon, L, current_q)
         samples[i, :] = np.array([res[0][0], res[0][1]])
         current_q = res[0]
         if (i > 10):
-            print(m * arviz.ess(samples[:, :2].T) / i)  # monitor effective size of first 3 components
+            print("ess:", m * arviz.ess(samples[:, :2].T) / i)  # monitor effective size of first 3 components
 
         # plot trajectory
         if i % 20 == 19:
             traj = res[1]
             #plt.figure(figsize=(15,10))
-            if n == 2: plt.imshow(img, extent=[-25,25,-20,10])
-            plt.plot([traj[0][1][0], traj[1][1][0]],[traj[0][1][1], traj[1][1][1]])
+            if n == 2: plt.imshow(img, extent=[-25 * factor,25 * factor,-20 * factor,10 * factor])
+            plt.scatter([traj[0][1][0], traj[1][1][0]],[traj[0][1][1], traj[1][1][1]], alpha=0.1)
             for h in range(2, len(traj)):
-                plt.plot([traj[h - 1][1][0], traj[h][1][0]],[traj[h- 1][1][1], traj[h][1][1]])
+                ...
+                plt.scatter([traj[h - 1][1][0], traj[h][1][0]],[traj[h- 1][1][1], traj[h][1][1]], alpha=0.1)
                 #plt.scatter([h[0][0]], [h[0][1]])
                 #print(h)
             #plt.ylim(-2, 2)
             #plt.xlim(-2, 2)
             #plt.imshow(img)
             #plt.savefig()
+
+
             plt.show()
             # g1 = ggplot(res$traj, aes(x=X1, y=X2))  + coord_cartesian(ylim=c(-2, 2), xlim=c(-2, 2))+ geom_point() +
             # geom_path() + theme_bw() + xlab("p1") + ylab("p2") +
@@ -167,7 +187,7 @@ def gradf(f, x0):
         fplus = f(x0 + base)
         fminus = f(x0 - base)
         gs[i] = ((fplus - fminus) / (2 * eps))
-    return gs
+    return -gs
 
 def logi_fun(xs):
     ...
@@ -176,20 +196,70 @@ if __name__ == "__main__":
     #n = neff(np.array((1,2,3,1,2,3,1,2,3,1,2,3)))
     #h = arviz.ess(np.array((1,2,3,1,2,3,1,2,3,1,2,3)), method="identity")
     dataset = pd.read_csv("datset.csv").to_numpy()
+    logreg1 = LogisticRegression(penalty="none",fit_intercept=False)
+    logreg1.fit(dataset[:, :11], dataset[:, -1])
+    logreg2 = LogisticRegression()
+    logreg2.fit(dataset[:, :11], dataset[:, -1])
     #print(dataset)
-    clf = LogisticRegression(fit_intercept=False)
-    clf.fit(dataset[:, :2], dataset[:,-1])
-    logistic_1 = lambda x: clf._predict_proba_lr(np.atleast_2d(x))[:,0]
-    clf2 = LogisticRegression(fit_intercept=False)
-    clf2.fit(dataset[:,:-1], dataset[:,-1])
-    logistic_2 = lambda x: clf2.predict_proba(np.atleast_2d(x))[:,0]
-    bivariate = lambda x:multivariate_normal.pdf(x, mean=np.zeros(2), cov=np.array([[2,-1],[-1,2]]))
+
+    def logistic_1(x):#log prob
+        x = np.atleast_2d(x).T
+        z = dataset[:, :2] @ x
+        return np.sum(np.log(1 + np.exp(-z)) + (1 - dataset[:, -1:]) * z)
+        z = dataset[:, :2] @ x
+        return np.log(np.sum(np.log(1 + np.exp(-z)) + (1 - dataset[:, -1:]) * z))
+
+    def logi1_grad(x):
+        z = np.exp(-(dataset[:, :2] @ np.atleast_2d(x).T))
+        tz = z / (1 + z)
+        return -(dataset[:,:2].T @ tz - dataset[:,:2].T @ (1 - dataset[:,-1:])).squeeze()
+        z = np.exp(-(dataset[:,:2].dot(x)))
+
+        tz = z / (1 + z)
+        return -(dataset[:, :2].T @ tz - dataset[:, :2].T @ (1 - dataset[:, -1]))
+
+
+    def logistic_2(x):#log prob
+        z = dataset[:, :11] @ x
+        return np.log(np.sum(np.log(1 + np.exp(-z)) + (1 - dataset[:, -1]) * z))
+
+    def logi2_grad(x):
+        z = np.exp(-(dataset[:,:11].dot(x)))
+
+        tz = z / (1 + z)
+        return -(dataset[:, :11].T @ tz - dataset[:, :11].T @ (1 - dataset[:, -1]))
+
+    bivariate = lambda x:np.log(multivariate_normal.pdf(x, mean=np.zeros(2), cov=np.array([[2,-1],[-1,2]])))
+    #bivar.prob = function(x)
+    #{
+    #return (dmvnorm(x=c(x), mean=rep(0, 2), sigma=covmat))
+    #}
+
+#    bivar.prob.log = function(x)
+#    {
+#    return (log(dmvnorm(x=c(x), mean=rep(0, 2), sigma=covmat)))
+#}
+
+#bivar.log.grad = function(x)
+#{
+#return (-solve(covmat) % * % x)
+#}
+
+
+
+
     banana = lambda x: np.exp(-minus_logf(x))
-
-    funt = logistic_1
-    fun = lambda x: -np.log(funt(x))
-    grad = lambda x:gradf(fun, x)
-
+    bananagrad = minus_logf_grad
+    #funt = logistic_1
+    def fun(x):
+        a = np.log(logistic_1(x))
+        return np.exp(a)/(1 + np.exp(a))
+    #fun = lambda x: -np.log(funt(x))
+    fun = logistic_1
+    #fun = banana
+    grad = lambda x:gradf(logistic_1, x)
+    grad = logi1_grad
+    #grad = bananagrad
     hmc_f(fun, grad, 2)
     quit()
     samples = metropolis_hastings(np.ones(2), logistic_1)
