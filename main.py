@@ -1,4 +1,5 @@
 import random
+import time
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -10,47 +11,73 @@ import arviz
 #multivariate_normal.pdf(x, mean=2.5, cov=0.5)
 
 rng = np.random.default_rng()
-def logp(a, b, cov, target_f):#proposals
+def logp(b, a, cov, target_f):#proposals
     #TODO mogoče treba zamenjat a in b
     #test = -n * log(x[2]) - (sum_y2 - 2 * nybar * x[1] + n * x[1] ** 2) / (2 * x[2] ** 2) - log(1 + x[2] ** 2)
     l1 = np.log(target_f(a))
     l2 = np.log(multivariate_normal.pdf(b, mean=np.zeros(b.shape[0]), cov=cov, allow_singular=True))
     return l1 + l2
-def metropolis_hastings(start, func, steps=1000, burnin=True):
-    size = start.shape[0]
-    S = np.eye(size)
-    current_theta = start.copy()
-    B = 10
-    samples = np.zeros((steps - (steps%B), size))
-    a_rate = np.zeros(B)
-    M = steps // B
-    i = 0
-    if burnin:
-        for b in range(B):
-            for m in range(M):
-                i = b * M + m
-                cov = (2.4**2)*S/size
-                proposed_theta = rng.multivariate_normal(mean=np.zeros(size), cov=cov)
-                #cov = (2.4**2)*np.eye(size)/size
-                log_r = logp(proposed_theta, current_theta, cov, func) - logp(current_theta, proposed_theta, cov, func)
-                if np.log(rng.random()) < log_r:
-                    current_theta = proposed_theta
-                samples[i, :] = current_theta
+def metropolis_hastings(start, func, steps=10000, burnin=False, cov=None, burn=10):
+    dim = start.shape[0]
+    def proposal(dimension, cov):
+        return rng.multivariate_normal(mean=np.zeros(dimension), cov=cov)
+    def proposal_prob(x, cov):
+        return multivariate_normal.pdf(x, mean=np.zeros(x.shape[0]), cov=cov, allow_singular=True)
+    def proposal_logp(x, cov):
+        return -np.log(proposal_prob(x, cov))
+    def get_samples(start, cov):
+        current_theta = start
+        samples = []
+        for i in range(steps):
+            proposed_theta = proposal(dim, cov)
+            proposed_logp = proposal_logp(proposed_theta, cov)
+            target_logp = np.log(func(proposed_theta))
+            proposed0_logp = proposal_logp(current_theta, cov)
+            target0_logp = np.log(func(current_theta))
 
-            a_rate[b] = len(np.unique(samples[:i, 0])) / len(samples[:i, 0])
-            S = np.cov(samples[:i, :].T)
-        print(a_rate)
-    cov = (2.4 ** 2) * S / 2
-    samples = np.zeros((steps, size))
-    for i in range(steps):
-        proposed_theta = rng.multivariate_normal(mean=np.zeros(size), cov=cov)
-        log_r = logp(proposed_theta, current_theta, cov, func) - logp(current_theta, proposed_theta, cov, func)
-        if np.log(rng.random()) < log_r:
-            current_theta = proposed_theta
-        samples[i, :] = current_theta
-    #print(len(np.unique(samples[:,1]))/len(samples[:,1]) )
-    #plt.hist(samples.squeeze(), bins=200)
+            logratio = target_logp - proposed_logp - target0_logp + proposed0_logp
+
+            if np.log(random.random()) < -logratio:
+                current_theta = proposed_theta
+            samples.append(current_theta)
+        return np.array(samples)
+
+    sigma = np.eye(dim)
+    if cov is None:
+        #TODO make this a parameter
+        cov = (2.4 ** 2) * sigma / dim
+    samples = np.zeros((burn * burn * (steps//burn),dim))
+    print(cov)
+    start_time = time.time()
+    if burnin:
+        for i in range(burn):
+            ... #just do manual tuning... q.q
+            cov = (2.4 ** 2) * sigma / dim
+            print(cov)
+            current_theta = start
+            for j in range(burn):
+                for k in range(steps//burn):
+                    proposed_theta = proposal(dim, cov)
+                    proposed_logp = proposal_logp(proposed_theta, cov)
+                    target_logp = np.log(func(proposed_theta))
+                    proposed0_logp = proposal_logp(current_theta, cov)
+                    target0_logp = np.log(func(current_theta))
+
+                    logratio = target_logp - proposed_logp - target0_logp + proposed0_logp
+
+                    if np.log(random.random()) < -logratio:
+                        current_theta = proposed_theta
+                    samples[i * burn * (steps//burn) + j * (steps//burn) + k] = current_theta
+            sigma = np.cov(samples[:(i+1) * burn * (steps//burn), :].T)
+            #if (sigma < 1).all():
+            #    sigma /= np.max(np.abs(sigma))
+            #if (np.abs(sigma) > 100).all():
+            #    sigma /= np.max(np.abs(sigma))
+    #cov = np.array([[3,0.3],[0.11,3]])
+    samples = get_samples(start, cov)
+
     return samples
+
 
 B = 0.05
 def minus_logf(x):
@@ -103,7 +130,7 @@ def HMC(U, grad_U, epsilon, L, current_q):
 
 def hmc_f(f, grad, n):
     img = None
-    factor = 10
+    factor = 1
     print("building image...")
     if n == 2:
         hi_res = False
@@ -114,8 +141,8 @@ def hmc_f(f, grad, n):
                 if i % 50 == 0:
                     print(f"{i // 50} % done")
                 for j in range(300):
-                    #img[299 - j, i] = np.exp(-f((i/10 - 25 ,j/10 - 20.0)))
-                    img[299 - j, i] = -f((i/10 - 25 ,j/10 - 20.0))
+                    img[299 - j, i] = np.exp(-f((i/10 - 25 ,j/10 - 20.0)))
+                    #img[299 - j, i] = -f((i/10 - 25 ,j/10 - 20.0))
         else:
             img = np.zeros((300, 500))
             for i in range(50):
@@ -123,12 +150,13 @@ def hmc_f(f, grad, n):
                 for j in range(30):
                     #img[299 - j, i] = -f((i/10 - 25 ,j/10 - 20.0))
                     #factor = 2
-                    img[299-((10*j)+9):299-(10*j) + 1, (10 * i):(10 * i + 10)] = -f(((i * factor) + 0.5 - (25 * factor), ((j * factor) + 0.5) - (20.0 * factor)))
+                    img[299-((10*j)+9):299-(10*j) + 1, (10 * i):(10 * i + 10)] = np.exp(-f(((i * factor) + 0.5 * factor - (25 * factor), ((j * factor) + 0.5 * factor) - (20.0 * factor))))
+
     print(np.sum(np.sum(1-img)))
     ## HMC
-    L = 1000
-    epsilon = 0.14#0.6
-    current_q = np.array((0, 10))
+    L = 200
+    epsilon = 0.11#0.6
+    current_q = np.array((0, 0))
     m = 100
     samples = np.zeros((m, 2))
     #pdf(paste("trajectories-ex02.pdf", sep=""), width=9, height=3)
@@ -205,31 +233,28 @@ if __name__ == "__main__":
     def logistic_1(x):#log prob
         x = np.atleast_2d(x).T
         z = dataset[:, :2] @ x
-        return np.sum(np.log(1 + np.exp(-z)) + (1 - dataset[:, -1:]) * z)
-        z = dataset[:, :2] @ x
         return np.log(np.sum(np.log(1 + np.exp(-z)) + (1 - dataset[:, -1:]) * z))
 
     def logi1_grad(x):
         z = np.exp(-(dataset[:, :2] @ np.atleast_2d(x).T))
         tz = z / (1 + z)
         return -(dataset[:,:2].T @ tz - dataset[:,:2].T @ (1 - dataset[:,-1:])).squeeze()
-        z = np.exp(-(dataset[:,:2].dot(x)))
-
-        tz = z / (1 + z)
-        return -(dataset[:, :2].T @ tz - dataset[:, :2].T @ (1 - dataset[:, -1]))
 
 
-    def logistic_2(x):#log prob
+    def logistic_2(x):  # log prob
+        x = np.atleast_2d(x).T
         z = dataset[:, :11] @ x
-        return np.log(np.sum(np.log(1 + np.exp(-z)) + (1 - dataset[:, -1]) * z))
+        return np.log(np.sum(np.log(1 + np.exp(-z)) + (1 - dataset[:, -1:]) * z))
+
 
     def logi2_grad(x):
-        z = np.exp(-(dataset[:,:11].dot(x)))
-
+        z = np.exp(-(dataset[:, :11] @ np.atleast_2d(x).T))
         tz = z / (1 + z)
-        return -(dataset[:, :11].T @ tz - dataset[:, :11].T @ (1 - dataset[:, -1]))
+        return -(dataset[:, :11].T @ tz - dataset[:, :11].T @ (1 - dataset[:, -1:])).squeeze()
 
-    bivariate = lambda x:np.log(multivariate_normal.pdf(x, mean=np.zeros(2), cov=np.array([[2,-1],[-1,2]])))
+    logbivariate = lambda x:-np.log(multivariate_normal.pdf(x, mean=np.zeros(2), cov=np.array([[2,-1],[-1,2]])))
+    def logbivar_grad(x):
+        return (np.linalg.inv(np.array([[2,-1],[-1,2]])) @ np.atleast_2d(x).T).T.squeeze()
     #bivar.prob = function(x)
     #{
     #return (dmvnorm(x=c(x), mean=rep(0, 2), sigma=covmat))
@@ -248,24 +273,19 @@ if __name__ == "__main__":
 
 
 
-    banana = lambda x: np.exp(-minus_logf(x))
+    banana = lambda x: minus_logf(x)
     bananagrad = minus_logf_grad
-    #funt = logistic_1
-    def fun(x):
-        a = np.log(logistic_1(x))
-        return np.exp(a)/(1 + np.exp(a))
+
     #fun = lambda x: -np.log(funt(x))
     fun = logistic_1
     #fun = banana
-    grad = lambda x:gradf(logistic_1, x)
-    grad = logi1_grad
-    #grad = bananagrad
-    hmc_f(fun, grad, 2)
-    quit()
-    samples = metropolis_hastings(np.ones(2), logistic_1)
-
-
-    print(samples)
+    #fun = logbivariate
+    #grad = lambda x:gradf(logistic_1, x)
+    #grad = logi1_grad
+    grad = bananagrad
+    #grad = logbivar_grad
+    #hmc_f(fun, grad, 2) #TESTED
+    samples = metropolis_hastings(np.ones(2), fun, burnin=True, burn=10, steps=1000)
     plt.scatter(samples[:,0], samples[:,1])
     plt.show()
 
