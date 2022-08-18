@@ -18,7 +18,7 @@ def logp(b, a, cov, target_f):#proposals
     l2 = np.log(multivariate_normal.pdf(b, mean=np.zeros(b.shape[0]), cov=cov, allow_singular=True))
     return l1 + l2
 
-def rejection_sampling(func, dim, n=1000, bounds=None):
+def rejection_sampling(func, dim, n=1000, bounds=None, maximum=1.0):
     if bounds is None:
         bounds = np.ones((dim, 2)) * 10
         bounds[:,0] *= -1
@@ -30,7 +30,7 @@ def rejection_sampling(func, dim, n=1000, bounds=None):
     samples = np.zeros((n, dim))
     while num_samps < n:
         point = np.array([sample(bounds[x]) for x in range(dim)])
-        if func(point) < random.random():
+        if np.exp(-func(point)) > random.random() * maximum:
             samples[num_samps, :] = point
             num_samps += 1
     return samples
@@ -49,30 +49,30 @@ def metropolis_hastings(start, func, steps=10000, burnin=False, cov=None, burn=1
         return np.log(proposal_prob(x, cov))
     def get_samples(start, cov):
         current_theta = start
-        samples = []
+        samples = np.zeros((steps, dim))
         for i in range(steps):
             proposed_theta = current_theta + proposal(dim, cov) * step_size
             #proposed_theta = proposal(dim, cov)
-            proposed_logp = proposal_logp(proposed_theta, cov)
-            target_logp = -np.log(func(proposed_theta))
-            proposed0_logp = proposal_logp(current_theta, cov)
-            target0_logp = -np.log(func(current_theta))
+            #proposed_logp = proposal_logp(proposed_theta, cov)
+            #target_logp = -np.log(func(proposed_theta))
+            target_logp = -func(proposed_theta)
+            #proposed0_logp = proposal_logp(current_theta, cov)
+            #target0_logp = -np.log(func(current_theta))
+            target0_logp = -func(current_theta)
             logratio = (target_logp - target0_logp)# + (proposed0_logp - proposed_logp)
-            # logratio = target_logp - proposed_logp - target0_logp + proposed0_logp
+            #logratio = target_logp - proposed_logp - target0_logp + proposed0_logp
 
-            # if np.log(random.random()) < -logratio:
+            #if np.log(random.random()) < -logratio:
             if random.random() < np.exp(logratio):
                 current_theta = proposed_theta
-            samples.append(current_theta)
-        return np.array(samples)
+            samples[i, :] = current_theta
+        return samples
 
     sigma = np.eye(dim)
     if cov is None:
-        #TODO make this a parameter
         cov = (2.4 ** 2) * sigma / dim
     samples = np.zeros((burn * burn * burn_steps, dim))
     print(cov)
-    start_time = time.time()
     if burnin:
         for i in range(burn):
             ... #just do manual tuning... q.q
@@ -82,13 +82,13 @@ def metropolis_hastings(start, func, steps=10000, burnin=False, cov=None, burn=1
             for j in range(burn):
                 for k in range(burn_steps):
                     proposed_theta = current_theta + proposal(dim, cov) * step_size
-                    proposed_theta = proposal(dim, cov)
+                    #proposed_theta = proposal(dim, cov)
                     proposed_logp = proposal_logp(proposed_theta, cov)
-                    target_logp = -np.log(func(proposed_theta))
+                    target_logp = -func(proposed_theta)
                     proposed0_logp = proposal_logp(current_theta, cov)
-                    target0_logp = -np.log(func(current_theta))
-                    logratio = (target_logp - target0_logp) + (proposed0_logp - proposed_logp)
-                    # logratio = target_logp - proposed_logp - target0_logp + proposed0_logp
+                    target0_logp = -func(current_theta)
+                    #logratio = (target_logp - target0_logp)# + (proposed0_logp - proposed_logp)
+                    logratio = target_logp - proposed_logp - target0_logp + proposed0_logp
 
                     # if np.log(random.random()) < -logratio:
                     if random.random() < np.exp(logratio):
@@ -106,8 +106,8 @@ def metropolis_hastings(start, func, steps=10000, burnin=False, cov=None, burn=1
                     #    if not np.isnan(proposed_theta).any():
                     #        current_theta = proposed_theta
                     samples[i * burn * burn_steps + j * burn_steps + k] = current_theta
-                sigma = np.cov(samples[:(i+1) * burn * burn_steps, :].T)
-                cov = (2.4 ** 2) * sigma / dim
+            sigma = np.cov(samples[:(i+1) * burn * burn_steps, :].T)
+            cov = (2.4 ** 2) * sigma / dim
 
     #cov = np.array([[3,0.3],[0.11,3]])
     samples = get_samples(start, cov)
@@ -162,12 +162,21 @@ def HMC(U, grad_U, epsilon, L, current_q):
     else:
         return current_q, traj  # reject
 
+def hamilton_MC(f, grad, num=1000, epsilon=0.11, dim=2, L=27, current_q=None):
+    samples = np.zeros((num,dim))
+    if current_q is None:
+        current_q = np.array((0, 0))
+    for i in range(num):
+        res = HMC(f, grad, epsilon, L, current_q)
+        samples[i, :] = np.array([res[0][0], res[0][1]])
+        current_q = res[0]
+    return samples
 
 def hmc_f(f, grad, n, L=500, epsilon=0.11):
     img = None
     factor = 1
     print("building image...")
-    if n == 2:
+    if n == 13:
         hi_res = False
         if hi_res:
             img = np.zeros((300, 500))
@@ -203,11 +212,11 @@ def hmc_f(f, grad, n, L=500, epsilon=0.11):
         if i % 20 == 19:
             traj = res[1]
             #plt.figure(figsize=(15,10))
-            if n == 2: plt.imshow(img, extent=[-25 * factor,25 * factor,-20 * factor,10 * factor])
-            plt.scatter([traj[0][1][0], traj[1][1][0]],[traj[0][1][1], traj[1][1][1]], alpha=0.1)
+            #if n == 2: plt.imshow(img, extent=[-25 * factor,25 * factor,-20 * factor,10 * factor])
+            #plt.scatter([traj[0][1][0], traj[1][1][0]],[traj[0][1][1], traj[1][1][1]], alpha=0.1)
             for h in range(2, len(traj)):
                 ...
-                plt.scatter([traj[h - 1][1][0], traj[h][1][0]],[traj[h- 1][1][1], traj[h][1][1]], alpha=0.1)
+                #plt.scatter([traj[h - 1][1][0], traj[h][1][0]],[traj[h- 1][1][1], traj[h][1][1]], alpha=0.1)
                 #plt.scatter([h[0][0]], [h[0][1]])
                 #print(h)
             #plt.ylim(-2, 2)
@@ -216,26 +225,7 @@ def hmc_f(f, grad, n, L=500, epsilon=0.11):
             #plt.savefig()
 
 
-            plt.show()
-            # g1 = ggplot(res$traj, aes(x=X1, y=X2))  + coord_cartesian(ylim=c(-2, 2), xlim=c(-2, 2))+ geom_point() +
-            # geom_path() + theme_bw() + xlab("p1") + ylab("p2") +
-            # geom_point(data=res$traj[1, ], colour = "red", aes(x=X1, y=X2))
-            #
-            # x < - seq(-25, 25, 0.2)
-            # x0 < - expand.grid(x, x)
-            # y < - apply(x0, 1, minus_logf)
-            # df < - data.frame(x0, y = exp(-y))
-            #
-            #
-            #
-            # g2 = ggplot(res$traj, aes(x=X1.1, y=X2.1)) + geom_point() +
-            # geom_path() + theme_bw() + xlab("q1")  + coord_cartesian(xlim=c(-25, 25), ylim=c(-20, 10)) + ylab("q2") +
-            # geom_point(data=res$traj[1, ], colour = "red", aes(x=X1.1, y=X2.1)) +
-            # geom_contour(data = df, mapping =  aes(Var1, Var2, z = y), alpha = 0.2, colour="black")
-            #
-            # g3 = ggplot(res$traj, aes(x=1:nrow(res$traj), y = H)) + geom_point() +
-            #                                                       geom_path() + theme_bw() + ylab("H") + xlab("step")
-            # multiplot(g1, g2, g3, cols=3)
+            #plt.show()
 
 dataset = pd.read_csv("datset.csv").to_numpy()
 #print(dataset)
@@ -243,9 +233,13 @@ reg1 = LogisticRegression(fit_intercept=False)
 reg1.fit(dataset[:,:2], dataset[:, -1:])
 reg2 = LogisticRegression(fit_intercept=False)
 reg2.fit(dataset[:, :11], dataset[:, -1:])
-def logistic_1(x):#log prob tDO TODO TODO TOD O TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TOD OTO TODO
-    def s(x):
-        return 1 / (1 + np.exp(-x))
+
+
+def s(x):
+    h = np.exp(-x)
+    return h / (1 + h)
+def logistic_1(x):
+
     #x = np.atleast_2d(x)
     #p = s(-x.dot(dataset[:, :2].T)).T
     #loss = np.multiply(dataset[:, -1:],np.log(p + 1e-15)) + \
@@ -254,32 +248,33 @@ def logistic_1(x):#log prob tDO TODO TODO TOD O TODO TODO TODO TODO TODO TODO TO
 
     x = np.atleast_2d(x).T
     z = dataset[:, :2] @ x
-    temp = np.sum(np.log(1 + np.exp(-z)) + (1 - dataset[:, -1:]) * z)
-    return np.log(temp)
-    #pred = reg1.predict_proba(x.T)
-    #pi = reg1.coef_
-    #stuff = dataset[:, :2].dot(reg1.coef_.T)
-    #print(s(x.dot(reg1.coef_))**pred[0])
-    #a = "wtf"
-    #print(a)
-    #loglik = 0
-    #return loglik
-def logi1_grad(x):
+    temp = np.sum(np.log(1 + np.exp(-z)) + (1 - dataset[:, -1:]) * z) #loglikelihood
+    return np.log(temp) #additional log, since the values are so small
+def logi1_grad(x):#Derivative of log-loglikelihood, since values were too small to handle otherwise
     z = np.exp(-(dataset[:, :2] @ np.atleast_2d(x).T))
     tz = z / (1 + z)
-    return -(dataset[:,:2].T @ tz - dataset[:,:2].T @ (1 - dataset[:,-1:])).squeeze()
-
+    temp = -(dataset[:,:2].T @ tz - dataset[:,:2].T @ (1 - dataset[:,-1:])).squeeze()
+    return temp# * 1/logistic_1(x)
 
 def logistic_2(x):  # log prob
+    #x = np.atleast_2d(x).T
+    #z = dataset[:, :11] @ x
+    #return np.log(np.sum(np.log(1 + np.exp(-z)) + (1 - dataset[:, -1:]) * z))
     x = np.atleast_2d(x).T
     z = dataset[:, :11] @ x
-    return np.log(np.sum(np.log(1 + np.exp(-z)) + (1 - dataset[:, -1:]) * z))
+    temp = np.sum(np.log(1 + np.exp(-z)) + (1 - dataset[:, -1:]) * z) #loglikelihood
+    return np.log(temp) #additional log, since the values are so small
 
 
 def logi2_grad(x):
+    #z = np.exp(-(dataset[:, :11] @ np.atleast_2d(x).T))
+    #tz = z / (1 + z)
+    #return -(dataset[:, :11].T @ tz - dataset[:, :11].T @ (1 - dataset[:, -1:])).squeeze()
+
     z = np.exp(-(dataset[:, :11] @ np.atleast_2d(x).T))
     tz = z / (1 + z)
-    return -(dataset[:, :11].T @ tz - dataset[:, :11].T @ (1 - dataset[:, -1:])).squeeze()
+    temp = -(dataset[:,:11].T @ tz - dataset[:,:11].T @ (1 - dataset[:,-1:])).squeeze()
+    return temp * 1/logistic_2(x)
 
 def logbivariate(x):
     return -np.log(multivariate_normal.pdf(x, mean=np.zeros(2), cov=np.array([[2,-1],[-1,2]])))
@@ -289,33 +284,115 @@ def logbivar_grad(x):
 if __name__ == "__main__":
     banana = lambda x: minus_logf(x)
     bananagrad = minus_logf_grad
-
-    fun = logistic_1
-    fun = banana
+    file = open("output_ess.txt", "w")
+    #fun = logistic_1
+    #fun = banana
     #fun = logbivariate
-    grad = logi1_grad
-    grad = bananagrad
+    #grad = logi1_grad
+    #grad = bananagrad
     #grad = logbivar_grad
     #hmc_f(fun, grad, 2, epsilon=0.11) #TESTED1
-    #ZAKAJ DAFAK AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA rabimo to?
-    samples = rejection_sampling(fun, bounds=np.array([[-25,25],[-20,10]]), dim=2, )
-    #samples = metropolis_hastings(np.ones(2), fun,  burnin=True, burn=10, steps=10000, burn_steps=1000)
-    #unique_samples = np.unique(samples, axis=0)np.array([[200, -20],[-20, 70]])
-    unique_samples = samples
-    print("making image")
-    img = np.zeros((300, 500))
-    factor = 1
-    for i in range(50):
-        #print(i)
-        for j in range(30):
-            # img[299 - j, i] = -f((i/10 - 25 ,j/10 - 20.0))
-            # factor = 2
-            img[299 - ((10 * j) + 9):299 - (10 * j) + 1, (10 * i):(10 * i + 10)] = np.exp(
-                -fun(((i * factor) + 0.5 * factor - (25 * factor), ((j * factor) + 0.5 * factor) - (20.0 * factor))))
-    plt.imshow(img, extent=[-25 * factor, 25 * factor, -20 * factor, 10 * factor])
-    unique_samples = np.unique(samples, axis=0)
-    plt.scatter(unique_samples[:, 0], unique_samples[:, 1], alpha=0.1, color="red")
-    plt.show()
-    plt.scatter(range(samples.shape[0]), samples[:,0])
-    plt.show()
+    #ZAKAJ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA?
+    #samples = rejection_sampling(fun, bounds=np.array([[-25,25],[-20,10]]), dim=2, )#tested
+    cov1 = np.array([[1, 0],[0,1]])
+    #cov2 = np.array([[100, 30],[30,70]])
+    for funct, grad, cov2 in [(logbivariate, logbivar_grad, np.array([[6, -3],[-3,6]])),
+                              (banana,       bananagrad,    np.array([[50, -10],[-10,20]])),
+                              (logistic_1,   logi1_grad,    np.array([[4,-2],[-2,9]]))]:
+        if funct == logbivariate:
+            h = 0
+        elif funct == banana:
+            h = 1
+        elif funct == logistic_1:
+            h = 2
+        for algo in [hamilton_MC,
+                     metropolis_hastings,
+                     rejection_sampling
+                     ]:
+            if algo == hamilton_MC:
+                g = 0
+            elif algo == metropolis_hastings:
+                g = 1
+            elif algo == rejection_sampling:
+                g = 2
+            for tune in [False, True]:
+                if tune:
+                    cov = cov2
+                else:
+                    cov = cov1
 
+                print("making image")
+
+                #plt.figure()
+                fig, axes = plt.subplots(4, 2, figsize=(15, 10))
+                img = np.zeros((300, 500))
+                factor = 1
+                fun = funct
+                #fun = logistic_1
+                for i in range(50):
+                    # print(i)
+                    for j in range(30):
+                        # img[299 - j, i] = -f((i/10 - 25 ,j/10 - 20.0))
+                        # factor = 2
+                        img[299 - ((10 * j) + 9):299 - (10 * j) + 1, (10 * i):(10 * i + 10)] = np.exp(
+                            -fun(
+                                ((i * factor) + 0.5 * factor - (25 * factor), ((j * factor) + 0.5 * factor) - (20.0 * factor))))
+
+                axes[0, 0].imshow(img, extent=[-25 * factor, 25 * factor, -20 * factor, 10 * factor])
+                axes[0, 1].imshow(img, extent=[-25 * factor, 25 * factor, -20 * factor, 10 * factor])
+
+                #plt.imshow(img, extent=[-25 * factor, 25 * factor, -20 * factor, 10 * factor])
+                chains = np.zeros((5, 1000, 2))
+                start, end, ess = 0,0,0
+                #cov = np.array([[700, -350],[-250,700]])
+                for i, color in enumerate(["r", "g", "b", "cyan", "yellow"]):
+                    print(f"running chain {i}")
+                    if algo == hamilton_MC:
+                        start += time.time()
+                        if tune:
+                            #hmc_f(fun, grad, n=200, L=15, epsilon=0.11)
+                            samples = hamilton_MC(fun, grad, epsilon=0.11, L=15, num=1000)
+                        else:
+                            samples = hamilton_MC(fun, grad, epsilon=0.1, L=10, num=1000)
+
+                    elif algo == metropolis_hastings:
+                        start += time.time()
+                        samples = metropolis_hastings(np.zeros(2), fun, cov=cov, burnin=False, burn=10, steps=1000, burn_steps=1000)
+                    elif algo == rejection_sampling:
+                        maxi=1
+                        if fun == banana:
+                            maxi = 1
+                        elif fun == logbivariate:
+                            maxi = 0.1
+                        elif fun == logistic_1:
+                            maxi = 0.001
+                        start += time.time()
+                        samples = rejection_sampling(fun, dim=2, n=1000, bounds=np.array([[-25,25],[-20,10]]), maximum=maxi)
+                    end += time.time()
+                    #unique_samples = np.unique(samples, axis=0)np.array([[200, -20],[-20, 70]])
+                    #unique_samples = samples
+                    chains[i, :, :] = samples
+                    unique_samples = np.unique(samples, axis=0)
+                    axes[0,1].scatter(unique_samples[:, 0], unique_samples[:, 1], alpha=0.1, color=color)
+                avg_time = (end - start)/5 #in seconds
+                #axes = np.atleast_2d(axes)
+                idata = arviz.InferenceData()
+                idata.add_groups(
+                    {"posterior": {"x1": chains[:, :, 0], "x2": chains[:, :, 1]}},
+                    dims={"obs": None}
+                )
+                avg_ess = arviz.ess(idata, var_names=["x1", "x2"])
+                avg_ess = avg_ess["x1"].to_numpy() + avg_ess["x2"].to_numpy()
+                avg_ess = avg_ess / 2
+                print(f"{algo}\n{funct}\nTuning:{tune}\n", file=file)
+                print(avg_ess, "Average effective sample size", file=file)
+                print(avg_ess/avg_time, "Average ESS/s", file=file)
+                print("-------------------------",file=file, flush=True)
+                arviz.plot_trace(idata, var_names=["x1","x2"], kind="trace", compact=True, axes=axes[1:3, :], legend=True)
+                arviz.plot_autocorr(idata, var_names=["x1"], ax=axes[3, 0])
+                arviz.plot_autocorr(idata, var_names=["x2"], ax=axes[3, 1])
+                fig.tight_layout()
+                plt.savefig(f"{h}_{g}_tune{tune}.png")
+                #plt.show()
+                #arviz.plot_trace(chains, compact=True, kind="trace",figsize=(15,10))
+                #plt.tight_layout()

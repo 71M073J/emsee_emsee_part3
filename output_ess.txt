@@ -1,0 +1,126 @@
+<function hamilton_MC at 0x000001A03E57F940>
+<function logbivariate at 0x000001A03EC34EE0>
+Tuning:False
+
+489.5046689702243 Average effective sample size
+166.1816214953938 Average ESS/s
+-------------------------
+<function hamilton_MC at 0x000001A03E57F940>
+<function logbivariate at 0x000001A03EC34EE0>
+Tuning:True
+
+1811.7915058772446 Average effective sample size
+444.89534522522695 Average ESS/s
+-------------------------
+<function metropolis_hastings at 0x000001A03E57F820>
+<function logbivariate at 0x000001A03EC34EE0>
+Tuning:False
+
+301.48554710089076 Average effective sample size
+540.2987183062128 Average ESS/s
+-------------------------
+<function metropolis_hastings at 0x000001A03E57F820>
+<function logbivariate at 0x000001A03EC34EE0>
+Tuning:True
+
+614.3058219753635 Average effective sample size
+1373.6800879630239 Average ESS/s
+-------------------------
+<function rejection_sampling at 0x000001A03E56EF70>
+<function logbivariate at 0x000001A03EC34EE0>
+Tuning:False
+
+5020.546454174916 Average effective sample size
+226.35733573019357 Average ESS/s
+-------------------------
+<function rejection_sampling at 0x000001A03E56EF70>
+<function logbivariate at 0x000001A03EC34EE0>
+Tuning:True
+
+5016.171124811601 Average effective sample size
+223.30219252332552 Average ESS/s
+-------------------------
+<function hamilton_MC at 0x000001A03E57F940>
+<function <lambda> at 0x000001A03E5BE040>
+Tuning:False
+
+15.908649469899157 Average effective sample size
+91.95743433461139 Average ESS/s
+-------------------------
+<function hamilton_MC at 0x000001A03E57F940>
+<function <lambda> at 0x000001A03E5BE040>
+Tuning:True
+
+41.961037968514944 Average effective sample size
+184.5278504902372 Average ESS/s
+-------------------------
+<function metropolis_hastings at 0x000001A03E57F820>
+<function <lambda> at 0x000001A03E5BE040>
+Tuning:False
+
+8.714724665959436 Average effective sample size
+74.22647584065263 Average ESS/s
+-------------------------
+<function metropolis_hastings at 0x000001A03E57F820>
+<function <lambda> at 0x000001A03E5BE040>
+Tuning:True
+
+34.233210288032524 Average effective sample size
+300.2954985191406 Average ESS/s
+-------------------------
+<function rejection_sampling at 0x000001A03E56EF70>
+<function <lambda> at 0x000001A03E5BE040>
+Tuning:False
+
+4895.646894938498 Average effective sample size
+16573.077876856292 Average ESS/s
+-------------------------
+<function rejection_sampling at 0x000001A03E56EF70>
+<function <lambda> at 0x000001A03E5BE040>
+Tuning:True
+
+5003.46868078857 Average effective sample size
+16644.988992504957 Average ESS/s
+-------------------------
+<function hamilton_MC at 0x000001A03E57F940>
+<function logistic_1 at 0x000001A03EC343A0>
+Tuning:False
+
+24.222220495889317 Average effective sample size
+22.263130569497307 Average ESS/s
+-------------------------
+<function hamilton_MC at 0x000001A03E57F940>
+<function logistic_1 at 0x000001A03EC343A0>
+Tuning:True
+
+16.24060981326821 Average effective sample size
+10.015185922891057 Average ESS/s
+-------------------------
+<function metropolis_hastings at 0x000001A03E57F820>
+<function logistic_1 at 0x000001A03EC343A0>
+Tuning:False
+
+8.136253090701434 Average effective sample size
+38.09107823628869 Average ESS/s
+-------------------------
+<function metropolis_hastings at 0x000001A03E57F820>
+<function logistic_1 at 0x000001A03EC343A0>
+Tuning:True
+
+7.538590073842682 Average effective sample size
+37.09874130828446 Average ESS/s
+-------------------------
+<function rejection_sampling at 0x000001A03E56EF70>
+<function logistic_1 at 0x000001A03EC343A0>
+Tuning:False
+
+4739.712483952657 Average effective sample size
+19585.680779167953 Average ESS/s
+-------------------------
+<function rejection_sampling at 0x000001A03E56EF70>
+<function logistic_1 at 0x000001A03EC343A0>
+Tuning:True
+
+4776.966620396238 Average effective sample size
+21556.526894372877 Average ESS/s
+-------------------------
