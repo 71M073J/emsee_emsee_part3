@@ -83,12 +83,12 @@ def metropolis_hastings(start, func, steps=10000, burnin=False, cov=None, burn=1
                 for k in range(burn_steps):
                     proposed_theta = current_theta + proposal(dim, cov) * step_size
                     #proposed_theta = proposal(dim, cov)
-                    proposed_logp = proposal_logp(proposed_theta, cov)
+                    #proposed_logp = proposal_logp(proposed_theta, cov)
                     target_logp = -func(proposed_theta)
-                    proposed0_logp = proposal_logp(current_theta, cov)
+                    #proposed0_logp = proposal_logp(current_theta, cov)
                     target0_logp = -func(current_theta)
-                    #logratio = (target_logp - target0_logp)# + (proposed0_logp - proposed_logp)
-                    logratio = target_logp - proposed_logp - target0_logp + proposed0_logp
+                    logratio = (target_logp - target0_logp)# + (proposed0_logp - proposed_logp)
+                    #logratio = target_logp - proposed_logp - target0_logp + proposed0_logp
 
                     # if np.log(random.random()) < -logratio:
                     if random.random() < np.exp(logratio):
@@ -230,9 +230,9 @@ def hmc_f(f, grad, n, L=500, epsilon=0.11):
 dataset = pd.read_csv("datset.csv").to_numpy()
 #print(dataset)
 reg1 = LogisticRegression(fit_intercept=False)
-reg1.fit(dataset[:,:2], dataset[:, -1:])
+reg1.fit(dataset[:,:2], dataset[:, -1])
 reg2 = LogisticRegression(fit_intercept=False)
-reg2.fit(dataset[:, :11], dataset[:, -1:])
+reg2.fit(dataset[:, :11], dataset[:, -1])
 
 
 def s(x):
@@ -274,17 +274,18 @@ def logi2_grad(x):
     z = np.exp(-(dataset[:, :11] @ np.atleast_2d(x).T))
     tz = z / (1 + z)
     temp = -(dataset[:,:11].T @ tz - dataset[:,:11].T @ (1 - dataset[:,-1:])).squeeze()
-    return temp * 1/logistic_2(x)
+    return temp * 1/logistic_2(x) #grad of log
 
 def logbivariate(x):
-    return -np.log(multivariate_normal.pdf(x, mean=np.zeros(2), cov=np.array([[2,-1],[-1,2]])))
+    return -np.log(multivariate_normal.pdf(x, mean=np.zeros(2), cov=np.eye(2)))
 def logbivar_grad(x):
-    return (np.linalg.inv(np.array([[2,-1],[-1,2]])) @ np.atleast_2d(x).T).T.squeeze()
+    return (np.linalg.inv(np.eye(2)) @ np.atleast_2d(x).T).T.squeeze()
 
 if __name__ == "__main__":
     banana = lambda x: minus_logf(x)
     bananagrad = minus_logf_grad
-    file = open("output_ess.txt", "w")
+    file = open("output_ess.txt", "a")
+    print("-------------------------------------", file=file)
     #fun = logistic_1
     #fun = banana
     #fun = logbivariate
@@ -296,9 +297,10 @@ if __name__ == "__main__":
     #samples = rejection_sampling(fun, bounds=np.array([[-25,25],[-20,10]]), dim=2, )#tested
     cov1 = np.array([[1, 0],[0,1]])
     #cov2 = np.array([[100, 30],[30,70]])
-    for funct, grad, cov2 in [(logbivariate, logbivar_grad, np.array([[6, -3],[-3,6]])),
-                              (banana,       bananagrad,    np.array([[50, -10],[-10,20]])),
-                              (logistic_1,   logi1_grad,    np.array([[4,-2],[-2,9]]))]:
+    for funct, grad, cov2 in [(logbivariate, logbivar_grad, np.array([[2.88, 0],[0,2.88]])),
+                              (banana,       bananagrad,    np.array([[270, -10],[-10,100]])),
+                              (logistic_1,   logi1_grad,    np.array([[700,-100],[-100,20]]))
+                              ]:
         if funct == logbivariate:
             h = 0
         elif funct == banana:
@@ -324,7 +326,7 @@ if __name__ == "__main__":
                 print("making image")
 
                 #plt.figure()
-                fig, axes = plt.subplots(4, 2, figsize=(15, 10))
+
                 img = np.zeros((300, 500))
                 factor = 1
                 fun = funct
@@ -338,10 +340,12 @@ if __name__ == "__main__":
                             -fun(
                                 ((i * factor) + 0.5 * factor - (25 * factor), ((j * factor) + 0.5 * factor) - (20.0 * factor))))
 
-                axes[0, 0].imshow(img, extent=[-25 * factor, 25 * factor, -20 * factor, 10 * factor])
-                axes[0, 1].imshow(img, extent=[-25 * factor, 25 * factor, -20 * factor, 10 * factor])
+                #axes[0, 0].imshow(img, extent=[-25 * factor, 25 * factor, -20 * factor, 10 * factor])
+                #axes[0, 1].imshow(img, extent=[-25 * factor, 25 * factor, -20 * factor, 10 * factor])
 
                 #plt.imshow(img, extent=[-25 * factor, 25 * factor, -20 * factor, 10 * factor])
+
+                #
                 chains = np.zeros((5, 1000, 2))
                 start, end, ess = 0,0,0
                 #cov = np.array([[700, -350],[-250,700]])
@@ -373,14 +377,17 @@ if __name__ == "__main__":
                     #unique_samples = samples
                     chains[i, :, :] = samples
                     unique_samples = np.unique(samples, axis=0)
-                    axes[0,1].scatter(unique_samples[:, 0], unique_samples[:, 1], alpha=0.1, color=color)
+                    plt.scatter(unique_samples[:, 0], unique_samples[:, 1], alpha=0.1, color=color)
                 avg_time = (end - start)/5 #in seconds
+                plt.tight_layout()
+                plt.savefig(f"{h}_{g}_tuning{tune}_samples.png")
                 #axes = np.atleast_2d(axes)
                 idata = arviz.InferenceData()
                 idata.add_groups(
                     {"posterior": {"x1": chains[:, :, 0], "x2": chains[:, :, 1]}},
                     dims={"obs": None}
                 )
+                fig, axes = plt.subplots(2, 2, figsize=(10, 10))
                 avg_ess = arviz.ess(idata, var_names=["x1", "x2"])
                 avg_ess = avg_ess["x1"].to_numpy() + avg_ess["x2"].to_numpy()
                 avg_ess = avg_ess / 2
@@ -388,11 +395,14 @@ if __name__ == "__main__":
                 print(avg_ess, "Average effective sample size", file=file)
                 print(avg_ess/avg_time, "Average ESS/s", file=file)
                 print("-------------------------",file=file, flush=True)
-                arviz.plot_trace(idata, var_names=["x1","x2"], kind="trace", compact=True, axes=axes[1:3, :], legend=True)
-                arviz.plot_autocorr(idata, var_names=["x1"], ax=axes[3, 0])
-                arviz.plot_autocorr(idata, var_names=["x2"], ax=axes[3, 1])
+                arviz.plot_trace(idata, var_names=["x1","x2"], kind="trace", compact=True, axes=axes, legend=True)
                 fig.tight_layout()
                 plt.savefig(f"{h}_{g}_tune{tune}.png")
+                fig, axes = plt.subplots(1, 2, figsize=(10, 3))
+                arviz.plot_autocorr(idata, var_names=["x1"], ax=axes[0])
+                arviz.plot_autocorr(idata, var_names=["x2"], ax=axes[1])
+                fig.tight_layout()
+                plt.savefig(f"{h}_{g}_tune{tune}_autocorr.png")
                 #plt.show()
                 #arviz.plot_trace(chains, compact=True, kind="trace",figsize=(15,10))
                 #plt.tight_layout()
